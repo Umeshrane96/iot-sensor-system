@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IoT Sensor Simulator — ESP32 Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--s1:#0d1017;--s2:#111520;--s3:#161c28;
+  --br:#1e2535;--br2:#263044;
+  --t1:#e8ecf4;--t2:#8892a4;--t3:#4a5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:13px;overflow:hidden}
+
+.topbar{height:44px;background:var(--s1);border-bottom:1px solid var(--br);
+  display:flex;align-items:center;padding:0 12px;gap:8px;flex-wrap:nowrap}
+.logo{display:flex;align-items:center;gap:7px;margin-right:auto;flex-shrink:0}
+.logo-icon{width:22px;height:22px;border-radius:5px;background:var(--br2);display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:13px;height:13px}
+.logo-name{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--t1)}
+.logo-sub{font-size:10px;color:var(--t3)}
+.pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.05em;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.pill.ok{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2)}
+.pill.off{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.dot.pulse{animation:dotpulse 1.8s ease-in-out infinite}
+@keyframes dotpulse{0%,100%{opacity:1}50%{opacity:.3}}
+.top-sel{background:var(--s2);border:1px solid var(--br);color:var(--t1);border-radius:6px;padding:3px 7px;font-size:11px;font-family:var(--sans);cursor:pointer;flex-shrink:0}
+.top-btn{background:var(--s2);border:1px solid var(--br);color:var(--t2);border-radius:6px;padding:4px 10px;font-size:11px;font-family:var(--sans);cursor:pointer;transition:.15s;flex-shrink:0;white-space:nowrap}
+.top-btn:hover{border-color:var(--br2);color:var(--t1)}
+.top-btn.red{color:#f87171;border-color:rgba(248,113,113,.3)}
+.top-btn.red:hover{background:rgba(248,113,113,.08)}
+.top-sep{width:1px;height:16px;background:var(--br);flex-shrink:0}
+
+.alert-strip{height:0;overflow:hidden;background:rgba(248,113,113,.08);border-bottom:1px solid rgba(248,113,113,.2);transition:height .3s;display:flex;align-items:center;padding:0 14px;gap:8px;font-size:11px;color:#f87171}
+.alert-strip.show{height:28px}
+
+.body{display:flex;height:calc(100vh - 44px - 30px);overflow:hidden}
+
+.left{width:194px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--br);display:flex;flex-direction:column;overflow-y:auto}
+.panel-sec{padding:8px 12px 3px;font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.s-tiles{padding:0 7px 6px;display:flex;flex-direction:column;gap:4px}
+.s-tile{background:var(--s2);border:1px solid var(--br);border-radius:8px;padding:7px 9px;position:relative;overflow:hidden}
+.s-tile.alert-tile{border-color:rgba(248,113,113,.5)!important;animation:alertglow .9s ease-in-out infinite alternate}
+@keyframes alertglow{from{background:var(--s2)}to{background:rgba(248,113,113,.06)}}
+.s-tile-accent{position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;background:var(--tile-c,#4ade80)}
+.s-tile-top{display:flex;justify-content:space-between;align-items:flex-start;margin-left:8px}
+.s-tile-name{font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--t3)}
+.s-tile-chip{font-size:8px;padding:1px 5px;border-radius:4px;font-weight:600;letter-spacing:.04em}
+.s-tile-val{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--tile-c,#4ade80);margin:1px 0 0 8px;line-height:1}
+.s-tile-unit{font-size:9px;color:var(--t3);margin-left:8px}
+.spark{height:22px;width:100%;margin-top:4px}
+.spark canvas{width:100%!important;height:100%!important}
+
+.ctrl-wrap{padding:0 9px 8px;display:flex;flex-direction:column;gap:4px}
+.ctrl-row{display:flex;align-items:center;gap:5px}
+.ctrl-lbl{font-size:9px;color:var(--t3);width:70px;flex-shrink:0}
+input[type=range]{flex:1;accent-color:var(--t2);min-width:0;cursor:pointer}
+.ctrl-v{font-family:var(--mono);font-size:9px;color:var(--t1);width:28px;text-align:right;flex-shrink:0}
+.tog-wrap{display:flex;align-items:center;gap:8px;font-size:9px;color:var(--t3)}
+.tog{position:relative;width:26px;height:14px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tog-sl{position:absolute;inset:0;background:var(--br2);border-radius:8px;cursor:pointer;transition:.2s}
+.tog-sl:before{content:'';position:absolute;width:10px;height:10px;left:2px;top:2px;background:var(--t2);border-radius:50%;transition:.2s}
+.tog input:checked+.tog-sl{background:#4ade80}
+.tog input:checked+.tog-sl:before{transform:translateX(12px);background:#fff}
+
+.scale-panel{padding:0 9px 10px;display:flex;flex-direction:column;gap:8px}
+.scale-sensor-row{background:var(--s2);border:1px solid var(--br);border-radius:7px;padding:7px 8px}
+.scale-name{font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center;gap:5px}
+.scale-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.scale-sub-row{display:flex;align-items:center;gap:5px;margin-bottom:3px}
+.scale-icon{font-size:9px;color:var(--t3);width:14px;text-align:center;flex-shrink:0}
+.scale-sub-lbl{font-size:9px;color:var(--t3);width:30px;flex-shrink:0}
+input.scale-range{flex:1;min-width:0;cursor:pointer}
+.scale-val{font-family:var(--mono);font-size:9px;color:var(--t1);width:30px;text-align:right;flex-shrink:0}
+.scale-reset{font-size:8px;color:var(--t3);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;float:right;margin-top:-2px}
+.scale-reset:hover{color:var(--t2)}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:7px 9px;gap:4px;background:var(--bg)}
+.wave{flex:1;background:var(--s1);border:1px solid var(--br);border-radius:10px;display:flex;align-items:stretch;overflow:hidden;min-height:0;transition:border-color .3s}
+.wave:hover{border-color:var(--br2)}
+.wave.alerting{border-color:rgba(248,113,113,.4)!important}
+.wave-info{width:108px;flex-shrink:0;padding:7px 9px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--br);position:relative}
+.wave-color-bar{position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--wc,#4ade80)}
+.wave-sensor{font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);padding-left:8px}
+.wave-v{font-family:var(--mono);font-size:21px;font-weight:600;color:var(--wc,#4ade80);line-height:1;padding-left:8px;margin-top:2px}
+.wave-u{font-size:9px;color:var(--t3);padding-left:8px;margin-top:1px}
+.wave-badge{display:inline-block;font-size:8px;font-weight:600;padding:2px 5px;border-radius:4px;margin-top:3px;margin-left:8px;letter-spacing:.04em}
+.wave-canvas{flex:1;padding:5px 7px 3px 3px;min-width:0;display:flex;align-items:stretch}
+.wave-canvas canvas{width:100%!important;height:100%!important;display:block}
+
+.bbar{background:var(--s1);border-top:1px solid var(--br);height:30px;display:flex;align-items:center;padding:0 12px;gap:14px;font-size:10px;color:var(--t3)}
+.bbar-v{font-family:var(--mono);color:var(--t2);font-size:10px}
+.bbar-sep{width:1px;height:12px;background:var(--br)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 13 13" fill="none">
+        <circle cx="6.5" cy="6.5" r="2.5" fill="#38bdf8"/>
+        <circle cx="6.5" cy="6.5" r="5.5" stroke="#38bdf8" stroke-width=".8" fill="none" stroke-dasharray="2 2"/>
+      </svg>
+    </div>
+    <div><div class="logo-name">SensorGrid</div><div class="logo-sub">ESP32 · MQTT · Live Simulator</div></div>
+  </div>
+  <div class="pill ok" id="espPill"><div class="dot pulse" id="espDot"></div><span id="espTxt">ESP32 online</span></div>
+  <div class="pill ok"><div class="dot pulse"></div>Broker live</div>
+  <div class="top-sep"></div>
+  <label style="font-size:10px;color:var(--t3);flex-shrink:0">Scenario</label>
+  <select class="top-sel" id="scenarioSel" onchange="applyScenario(this.value)">
+    <option value="normal">Normal indoor</option>
+    <option value="hot">High temp alert</option>
+    <option value="humid">High humidity</option>
+    <option value="aqi">Poor air quality</option>
+    <option value="dark">Dark room</option>
+    <option value="prox">Proximity alert</option>
+    <option value="random">Full random</option>
+  </select>
+  <select class="top-sel" id="intervalSel" onchange="startLoop()">
+    <option value="500">0.5s</option>
+    <option value="1000">1s</option>
+    <option value="2000" selected>2s</option>
+    <option value="5000">5s</option>
+  </select>
+  <div class="top-sep"></div>
+  <button class="top-btn" id="toggleBtn" onclick="toggleESP()">Simulate offline</button>
+  <button class="top-btn red" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="alert-strip" id="alertStrip">
+  <svg width="10" height="10" viewBox="0 0 10 10" style="flex-shrink:0"><path d="M5 1L9 9H1Z" fill="#f87171"/></svg>
+  <span id="alertMsg">—</span>
+</div>
+
+<div class="body">
+  <div class="left">
+    <div class="panel-sec">Sensors</div>
+    <div class="s-tiles">
+      <div class="s-tile" id="st-temp" style="--tile-c:#f97316">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Temp</span><span class="s-tile-chip" id="chip-temp" style="background:rgba(249,115,22,.12);color:#f97316">OK</span></div>
+        <div class="s-tile-val" id="stv-temp">—</div><div class="s-tile-unit">°C</div>
+        <div class="spark"><canvas id="sp-temp"></canvas></div>
+      </div>
+      <div class="s-tile" id="st-hum" style="--tile-c:#38bdf8">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Humidity</span></div>
+        <div class="s-tile-val" id="stv-hum">—</div><div class="s-tile-unit">% RH</div>
+        <div class="spark"><canvas id="sp-hum"></canvas></div>
+      </div>
+      <div class="s-tile" id="st-pres" style="--tile-c:#a78bfa">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Pressure</span></div>
+        <div class="s-tile-val" id="stv-pres">—</div><div class="s-tile-unit">hPa</div>
+        <div class="spark"><canvas id="sp-pres"></canvas></div>
+      </div>
+      <div class="s-tile" id="st-aqi" style="--tile-c:#4ade80">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Air quality</span><span class="s-tile-chip" id="chip-aqi" style="background:rgba(74,222,128,.12);color:#4ade80">GOOD</span></div>
+        <div class="s-tile-val" id="stv-aqi">—</div><div class="s-tile-unit">raw ADC</div>
+        <div class="spark"><canvas id="sp-aqi"></canvas></div>
+      </div>
+      <div class="s-tile" id="st-light" style="--tile-c:#fbbf24">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Light</span><span class="s-tile-chip" id="chip-light" style="background:rgba(251,191,36,.12);color:#fbbf24">—</span></div>
+        <div class="s-tile-val" id="stv-light">—</div><div class="s-tile-unit">%</div>
+        <div class="spark"><canvas id="sp-light"></canvas></div>
+      </div>
+      <div class="s-tile" id="st-dist" style="--tile-c:#fb7185">
+        <div class="s-tile-accent"></div>
+        <div class="s-tile-top"><span class="s-tile-name">Distance</span></div>
+        <div class="s-tile-val" id="stv-dist">—</div><div class="s-tile-unit">cm</div>
+        <div class="spark"><canvas id="sp-dist"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel-sec" style="margin-top:4px">Scale controls</div>
+    <div class="scale-panel" id="scalePanel"></div>
+
+    <div class="panel-sec">Override</div>
+    <div class="ctrl-wrap">
+      <div class="ctrl-row"><span class="ctrl-lbl">Temperature</span><input type="range" id="sl-temp" min="0" max="60" step="0.5" value="25" oninput="mo()"><span class="ctrl-v" id="sl-temp-v">25</span></div>
+      <div class="ctrl-row"><span class="ctrl-lbl">Humidity</span><input type="range" id="sl-hum" min="0" max="100" step="1" value="55" oninput="mo()"><span class="ctrl-v" id="sl-hum-v">55</span></div>
+      <div class="ctrl-row"><span class="ctrl-lbl">AQI raw</span><input type="range" id="sl-aqi" min="0" max="1023" step="1" value="280" oninput="mo()"><span class="ctrl-v" id="sl-aqi-v">280</span></div>
+      <div class="ctrl-row"><span class="ctrl-lbl">Light</span><input type="range" id="sl-light" min="0" max="100" step="1" value="60" oninput="mo()"><span class="ctrl-v" id="sl-light-v">60</span></div>
+      <div class="ctrl-row"><span class="ctrl-lbl">Distance</span><input type="range" id="sl-dist" min="2" max="400" step="1" value="80" oninput="mo()"><span class="ctrl-v" id="sl-dist-v">80</span></div>
+      <div class="tog-wrap">
+        <label class="tog"><input type="checkbox" id="noiseToggle" checked><span class="tog-sl"></span></label>
+        Add sensor noise
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="wave" id="w-temp" style="--wc:#f97316">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Temperature</div>
+        <div class="wave-v" id="wv-temp">—</div><div class="wave-u">°C</div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-temp"></canvas></div>
+    </div>
+    <div class="wave" id="w-hum" style="--wc:#38bdf8">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Humidity</div>
+        <div class="wave-v" id="wv-hum">—</div><div class="wave-u">% RH</div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-hum"></canvas></div>
+    </div>
+    <div class="wave" id="w-pres" style="--wc:#a78bfa">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Pressure</div>
+        <div class="wave-v" id="wv-pres">—</div><div class="wave-u">hPa</div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-pres"></canvas></div>
+    </div>
+    <div class="wave" id="w-aqi" style="--wc:#4ade80">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Air quality</div>
+        <div class="wave-v" id="wv-aqi">—</div>
+        <div class="wave-u"><span class="wave-badge" id="wb-aqi" style="background:rgba(74,222,128,.12);color:#4ade80">—</span></div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-aqi"></canvas></div>
+    </div>
+    <div class="wave" id="w-light" style="--wc:#fbbf24">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Light level</div>
+        <div class="wave-v" id="wv-light">—</div>
+        <div class="wave-u"><span class="wave-badge" id="wb-light" style="background:rgba(251,191,36,.12);color:#fbbf24">—</span></div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-light"></canvas></div>
+    </div>
+    <div class="wave" id="w-dist" style="--wc:#fb7185">
+      <div class="wave-info"><div class="wave-color-bar"></div>
+        <div class="wave-sensor">Distance</div>
+        <div class="wave-v" id="wv-dist">—</div><div class="wave-u">cm</div>
+      </div>
+      <div class="wave-canvas"><canvas id="c-dist"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="bbar">
+  <span>Packets <span class="bbar-v" id="bPub">0</span></span>
+  <div class="bbar-sep"></div>
+  <span>Alerts <span class="bbar-v" id="bAlert" style="color:#f87171">0</span></span>
+  <div class="bbar-sep"></div>
+  <span>DB rows <span class="bbar-v" id="bRows">0</span></span>
+  <div class="bbar-sep"></div>
+  <span>Topic <span class="bbar-v" style="color:#fbbf24">iot/sensors/data</span></span>
+  <div style="margin-left:auto;display:flex;gap:14px;align-items:center">
+    <span>Device <span class="bbar-v">ESP32_NODE_01</span></span>
+    <div class="bbar-sep"></div>
+    <span>Uptime <span class="bbar-v" id="bUp">0s</span></span>
+  </div>
+</div>
+
+<script>
+const SENSORS=[
+  {k:'temp', label:'Temperature', color:'#f97316', defMin:0,   defMax:60,   presMin:0,   presMax:60},
+  {k:'hum',  label:'Humidity',    color:'#38bdf8', defMin:0,   defMax:100,  presMin:0,   presMax:100},
+  {k:'pres', label:'Pressure',    color:'#a78bfa', defMin:995, defMax:1030, presMin:980, presMax:1050},
+  {k:'aqi',  label:'Air quality', color:'#4ade80', defMin:0,   defMax:1023, presMin:0,   presMax:1023},
+  {k:'light',label:'Light',       color:'#fbbf24', defMin:0,   defMax:100,  presMin:0,   presMax:100},
+  {k:'dist', label:'Distance',    color:'#fb7185', defMin:0,   defMax:400,  presMin:0,   presMax:400},
+];
+const DEF_HPOINTS=50;
+const ch={},sp={},scaleState={};
+let online=true,pub=0,alertCnt=0,rows=0,t0=Date.now(),tid=null,manual=false;
+const state={temp:25,hum:55,aqi:280,light:60,dist:80};
+SENSORS.forEach(s=>{scaleState[s.k]={yMin:s.defMin,yMax:s.defMax,hPoints:DEF_HPOINTS};});
+
+function buildScalePanel(){
+  const panel=document.getElementById('scalePanel');panel.innerHTML='';
+  SENSORS.forEach(s=>{
+    const ss=scaleState[s.k];
+    const row=document.createElement('div');row.className='scale-sensor-row';
+    row.innerHTML=`<div class="scale-name"><span class="scale-dot" style="background:${s.color}"></span><span style="color:${s.color};font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">${s.label}</span><button class="scale-reset" onclick="resetScale('${s.k}')">reset</button></div>
+      <div class="scale-sub-row"><span class="scale-icon">↑</span><span class="scale-sub-lbl">Y max</span><input class="scale-range" type="range" style="accent-color:${s.color}" id="sc-ymax-${s.k}" min="${s.presMin}" max="${s.presMax}" step="${s.k==='pres'?1:s.k==='aqi'?10:1}" value="${ss.yMax}" oninput="updateScale('${s.k}','yMax',+this.value)"><span class="scale-val" id="sv-ymax-${s.k}">${ss.yMax}</span></div>
+      <div class="scale-sub-row"><span class="scale-icon">↓</span><span class="scale-sub-lbl">Y min</span><input class="scale-range" type="range" style="accent-color:${s.color}" id="sc-ymin-${s.k}" min="${s.presMin}" max="${s.presMax}" step="${s.k==='pres'?1:s.k==='aqi'?10:1}" value="${ss.yMin}" oninput="updateScale('${s.k}','yMin',+this.value)"><span class="scale-val" id="sv-ymin-${s.k}">${ss.yMin}</span></div>
+      <div class="scale-sub-row"><span class="scale-icon">↔</span><span class="scale-sub-lbl">X pts</span><input class="scale-range" type="range" style="accent-color:${s.color}" id="sc-hpts-${s.k}" min="10" max="200" step="5" value="${ss.hPoints}" oninput="updateScale('${s.k}','hPoints',+this.value)"><span class="scale-val" id="sv-hpts-${s.k}">${ss.hPoints}</span></div>`;
+    panel.appendChild(row);
+  });
+}
+
+function updateScale(k,prop,val){
+  const ss=scaleState[k];ss[prop]=val;
+  const labelMap={yMax:'ymax',yMin:'ymin',hPoints:'hpts'};
+  document.getElementById('sv-'+labelMap[prop]+'-'+k).textContent=val;
+  const c=ch[k];if(!c)return;
+  if(prop==='yMax')c.options.scales.y.max=val;
+  if(prop==='yMin')c.options.scales.y.min=val;
+  if(prop==='hPoints'){while(c.data.labels.length>val){c.data.labels.shift();c.data.datasets[0].data.shift();}}
+  c.update('none');
+}
+
+function resetScale(k){
+  const s=SENSORS.find(s=>s.k===k);
+  scaleState[k]={yMin:s.defMin,yMax:s.defMax,hPoints:DEF_HPOINTS};
+  buildScalePanel();
+  const c=ch[k];if(!c)return;
+  c.options.scales.y.min=s.defMin;c.options.scales.y.max=s.defMax;c.update('none');
+}
+
+function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `${r},${g},${b}`;}
+
+function mkLine(id,color,ymin,ymax,isSpark){
+  const ctx=document.getElementById(id).getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,isSpark?22:80);
+  const rgb=hexToRgb(color);
+  g.addColorStop(0,`rgba(${rgb},.18)`);g.addColorStop(1,`rgba(${rgb},.0)`);
+  return new Chart(ctx,{type:'line',data:{labels:[],datasets:[{data:[],borderColor:color,borderWidth:isSpark?1:1.5,pointRadius:0,tension:0.4,fill:true,backgroundColor:g}]},
+    options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{min:ymin,max:ymax,display:!isSpark,ticks:{font:{size:9,family:'JetBrains Mono'},color:'#4a5568',maxTicksLimit:4,padding:3},grid:{color:'rgba(255,255,255,0.03)'},border:{display:false}}}}});
+}
+
+function push(chart,val,maxPts){
+  chart.data.labels.push('');chart.data.datasets[0].data.push(val);
+  while(chart.data.labels.length>maxPts){chart.data.labels.shift();chart.data.datasets[0].data.shift();}
+  chart.update('none');
+}
+
+function initCharts(){
+  SENSORS.forEach(s=>{ch[s.k]=mkLine('c-'+s.k,s.color,s.defMin,s.defMax,false);sp[s.k]=mkLine('sp-'+s.k,s.color,s.defMin,s.defMax,true);});
+}
+
+const SC={normal:{temp:23,hum:50,aqi:200,light:65,dist:80},hot:{temp:38,hum:55,aqi:250,light:60,dist:80},humid:{temp:26,hum:85,aqi:220,light:55,dist:80},aqi:{temp:24,hum:52,aqi:750,light:60,dist:80},dark:{temp:22,hum:48,aqi:180,light:5,dist:80},prox:{temp:23,hum:50,aqi:200,light:60,dist:6}};
+
+function applyScenario(s){if(s==='random'){manual=false;return;}const sc=SC[s];if(!sc)return;manual=true;Object.keys(sc).forEach(k=>{const el=document.getElementById('sl-'+k);if(el){el.value=sc[k];document.getElementById('sl-'+k+'-v').textContent=sc[k];}});Object.assign(state,sc);}
+function mo(){manual=true;['temp','hum','aqi','light','dist'].forEach(k=>{const v=+document.getElementById('sl-'+k).value;document.getElementById('sl-'+k+'-v').textContent=v;state[k]=v;});}
+function noise(v,n){return +(v+(Math.random()-.5)*2*n).toFixed(2);}
+function aqiStatus(v){return v<300?'GOOD':v<500?'MODERATE':v<700?'UNHEALTHY':'HAZARDOUS';}
+function aqiCol(s){return s==='GOOD'?'#4ade80':s==='MODERATE'?'#fbbf24':s==='UNHEALTHY'?'#fb923c':'#f87171';}
+function lightStatus(v){return v<15?'DARK':v<40?'DIM':v<70?'NORMAL':'BRIGHT';}
+
+function tick(){
+  if(!manual){const sc=document.getElementById('scenarioSel').value;if(sc==='random')Object.assign(state,{temp:15+Math.random()*25,hum:20+Math.random()*70,aqi:50+Math.random()*950,light:Math.random()*100,dist:5+Math.random()*350});else Object.assign(state,SC[sc]||SC.normal);}
+  const n=document.getElementById('noiseToggle').checked;
+  const v={temp:+(n?noise(state.temp,.3):+state.temp).toFixed(1),hum:+Math.min(100,Math.max(0,n?noise(state.hum,.8):+state.hum)).toFixed(1),pres:+(n?noise(1013.25,.35):1013.25).toFixed(1),alt:+(n?noise(12,.2):12).toFixed(1),aqi:Math.max(0,Math.round(n?noise(state.aqi,8):+state.aqi)),light:Math.min(100,Math.max(0,Math.round(n?noise(state.light,1):+state.light))),dist:+Math.max(2,n?noise(state.dist,.6):+state.dist).toFixed(1)};
+  const aqiS=aqiStatus(v.aqi),lightS=lightStatus(v.light),aqiC=aqiCol(aqiS);
+  const vals={temp:v.temp,hum:v.hum,pres:v.pres,aqi:v.aqi,light:v.light,dist:v.dist};
+  SENSORS.forEach(s=>{push(ch[s.k],vals[s.k],scaleState[s.k].hPoints);push(sp[s.k],vals[s.k],20);});
+  ['temp','hum','pres','aqi','light','dist'].forEach(k=>{
+    const val=vals[k];
+    document.getElementById('wv-'+k).textContent=k==='aqi'||k==='light'?val:val.toFixed ? val.toFixed(1) : val;
+    document.getElementById('stv-'+k).textContent=k==='aqi'||k==='light'?val:val.toFixed ? val.toFixed(1) : val;
+  });
+  const wb=document.getElementById('wb-aqi');wb.textContent=aqiS;wb.style.color=aqiC;wb.style.background=aqiC+'18';
+  document.getElementById('chip-aqi').textContent=aqiS;document.getElementById('chip-aqi').style.color=aqiC;document.getElementById('chip-aqi').style.background=aqiC+'18';
+  const tempOk=v.temp<=35;document.getElementById('chip-temp').textContent=tempOk?(v.temp<10?'LOW':'OK'):'HIGH';document.getElementById('chip-temp').style.color=tempOk?(v.temp<10?'#38bdf8':'#4ade80'):'#f87171';document.getElementById('chip-temp').style.background=tempOk?(v.temp<10?'rgba(56,189,248,.12)':'rgba(74,222,128,.12)'):'rgba(248,113,113,.12)';
+  const lc=v.light>70?'#fbbf24':v.light>40?'#38bdf8':'#4a5568';const wb2=document.getElementById('wb-light');wb2.textContent=lightS;wb2.style.color=lc;wb2.style.background=lc+'20';document.getElementById('chip-light').textContent=lightS;document.getElementById('chip-light').style.color=lc;document.getElementById('chip-light').style.background=lc+'20';
+  const ta=v.temp>35||v.hum>80,aa=aqiS==='HAZARDOUS',da=v.dist<10;
+  document.getElementById('st-temp').classList.toggle('alert-tile',ta);document.getElementById('st-aqi').classList.toggle('alert-tile',aa);document.getElementById('st-dist').classList.toggle('alert-tile',da);
+  document.getElementById('w-temp').classList.toggle('alerting',ta);document.getElementById('w-aqi').classList.toggle('alerting',aa);document.getElementById('w-dist').classList.toggle('alerting',da);
+  pub++;rows++;document.getElementById('bPub').textContent=pub;document.getElementById('bRows').textContent=rows;
+  checkAlert(v,aqiS);
+}
+
+function checkAlert(v,aqiS){
+  let msg=null;
+  if(v.temp>35)msg='HIGH TEMPERATURE: '+v.temp.toFixed(1)+'°C exceeded 35°C threshold';
+  else if(v.hum>80)msg='HIGH HUMIDITY: '+v.hum.toFixed(1)+'% exceeded 80%';
+  else if(aqiS==='HAZARDOUS')msg='AIR QUALITY HAZARDOUS: AQI '+v.aqi;
+  else if(v.dist<10)msg='PROXIMITY ALERT: Object at '+v.dist.toFixed(1)+' cm';
+  const s=document.getElementById('alertStrip');
+  if(msg){alertCnt++;document.getElementById('bAlert').textContent=alertCnt;document.getElementById('alertMsg').textContent=msg;s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),4500);}
+}
+
+function toggleESP(){
+  online=!online;
+  const pill=document.getElementById('espPill'),dot=document.getElementById('espDot'),txt=document.getElementById('espTxt'),btn=document.getElementById('toggleBtn');
+  if(online){pill.className='pill ok';txt.textContent='ESP32 online';dot.classList.add('pulse');btn.textContent='Simulate offline';startLoop();}
+  else{pill.className='pill off';txt.textContent='ESP32 offline';dot.classList.remove('pulse');btn.textContent='Bring back online';clearInterval(tid);document.getElementById('alertMsg').textContent='LWT fired: ESP32_NODE_01 went offline';document.getElementById('alertStrip').classList.add('show');}
+}
+
+function clearAll(){
+  SENSORS.forEach(s=>{[ch[s.k],sp[s.k]].forEach(c=>{c.data.labels=[];c.data.datasets[0].data=[];c.update('none');});});
+  pub=0;alertCnt=0;rows=0;document.getElementById('bPub').textContent=0;document.getElementById('bAlert').textContent=0;document.getElementById('bRows').textContent=0;
+}
+
+function startLoop(){clearInterval(tid);tid=setInterval(tick,+document.getElementById('intervalSel').value);}
+
+setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;document.getElementById('bUp').textContent=h>0?h+'h '+m+'m':m>0?m+'m '+sec+'s':sec+'s';},1000);
+
+buildScalePanel();initCharts();startLoop();
+</script>
+</body>
+</html>
